@@ -8,11 +8,11 @@ class vk_user
     public $id;
     public $auth_key;
 
-    private $group;
-    private $type;
-    private $install;
-    private $hash;
-    private $is_secure;
+    public $group;
+    public $type;
+    public $install;
+    public $hash;
+    public $is_secure;
 
     public function create_user($get)
     {
@@ -32,31 +32,102 @@ class vk_app extends vk_user
     private $_id_app;
     private $_secret_app;
 
+    public $nameGroup;
+    public $urlImg;
+    public $cover_enabled;
+
+    private $_isContinue = true;
+
     public function __construct($id = false, $secret_app =  false)
     {
-        if ( $id && $secret_app )
+        if ( $id && $secret_app)
         {
             $this->_id_app = $id;
             $this->_secret_app = $secret_app;
+        }
+        else
+        {
+           $this->_isContinue = false;
+        }
+    }
+
+    public function isContinue()
+    {
+        return $this->_isContinue;
+    }
+
+    public function isInstall()
+    {
+        return $this->install;
+    }
+
+    public function isGroup()
+    {
+        return (bool)$this->group;
+    }
+
+    public function idGroup()
+    {
+        return $this->group;
+    }
+
+    public function apiGroup()
+    {
+        $request_params = array(
+            'group_id' => $this->group,
+            'fields' => 'cover',
+            'v' => '5.63'
+        );
+        $get_params = http_build_query($request_params);
+        $result = json_decode(file_get_contents('https://api.vk.com/method/groups.getById?'. $get_params));
+
+        if ($result  && !isset( $result -> error ) )
+        {
+           $this->nameGroup =  $result -> response[0] -> name;
+           $this->cover_enabled =  $result -> response[0] -> cover -> enabled;
+
+           if ( $this->cover_enabled )
+           {
+               $this->urlImg =  $result -> response[0] -> cover -> images[2] -> url;
+           }
+           else
+           {
+               $this->urlImg =  $result -> response[0] -> photo_200;
+           }
+        }
+        else
+        {
+            $this->_isContinue = false;
         }
 
     }
 
     public function hash($get)
     {
-        $sign = "";
-        foreach ($get as $key => $param)
+        if ( !isset($get['api_url']) )
         {
-            if ($key == 'hash' || $key == 'sign' || $key == 'api_result') continue;
-            $sign .=$param;
+            $this->_isContinue = false;
         }
-        $x = false;
+        else
+        {
+            $sign = "";
+            foreach ($get as $key => $param)
+            {
+                if ($key == 'hash' || $key == 'sign' || $key == 'api_result') continue;
+                $sign .=$param;
+            }
+            $x = false;
 
-        if ( isset($get['sign']) ) hash_hmac('sha256', $sign, $this->_secret_app) == $get['sign'] ? $x = true : $x = false;
+            if ( isset($get['sign']) ) hash_hmac('sha256', $sign, $this->_secret_app) == $get['sign'] ? $x = true : $x = false;
 
-        if ($x) $this->create_user($get);
+            if ($x) {
+                $this->create_user($get);
+                $this->apiGroup();
+            }  else $this->_isContinue = false;
 
-        return $x;
+
+
+        }
     }
 
     public function check_session()
